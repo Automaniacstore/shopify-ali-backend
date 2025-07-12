@@ -13,48 +13,47 @@ app.use((req, res, next) => {
 
 app.get('/api/product', async (req, res) => {
   const productId = req.query.productId;
+  const manualCountry = req.query.country;
+  const refresh = req.query.refresh === 'true'; // ✅ proveravamo da li korisnik traži sveže
+
   const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress;
 
-  if (!productId) {
-    return res.status(400).json({ error: 'Missing productId' });
+  if (!productId) return res.status(400).json({ error: 'Missing productId' });
+
+  let country = manualCountry || 'US';
+
+  if (!manualCountry) {
+    try {
+      const geoRes = await axios.get(`https://ipwho.is/${ip}`);
+      if (geoRes.data && geoRes.data.success && geoRes.data.country_code) {
+        country = geoRes.data.country_code;
+      } else {
+        console.warn('⚠️ Geo IP lookup failed, defaulting to US');
+      }
+    } catch {
+      console.warn('⚠️ Geo IP API unreachable, using US');
+    }
   }
 
-  try {
-    // 🌍 CountryCode via param OR Geo-IP fallback
-    let country = req.query.countryCode;
+  console.log(`[IP: ${ip}] Country: ${country} | Product: ${productId}`);
 
-    if (!country) {
-      try {
-        const geoRes = await axios.get(`https://ipwho.is/${ip}`);
-        if (geoRes.data && geoRes.data.success && geoRes.data.country_code) {
-          country = geoRes.data.country_code;
-        } else {
-          console.warn('⚠️ Geo IP lookup failed, defaulting to US');
-          country = 'US';
-        }
-      } catch (geoErr) {
-        console.warn('⚠️ IP lookup error:', geoErr.message);
-        country = 'US';
-      }
-    }
+  const cacheKey = `${productId}_${country}`;
 
-    console.log(`[IP: ${ip}] Country: ${country} | Product: ${productId}`);
-
-    // 🔁 Cache key
-    const cacheKey = `${productId}_${country}`;
+  // ✅ ako nije tražen refresh, pokušaj da koristiš keš
+  if (!refresh) {
     const cachedData = cache.get(cacheKey);
-
     if (cachedData) {
       console.log('✅ Serving from cache');
       return res.json({ ...cachedData, cached: true });
     }
+  } else {
+    console.log('🔄 Refresh enabled – skipping cache');
+  }
 
-    // 📦 Fetch sa AliExpress
+  try {
     const aliData = await aliApi.getAliExpressData(productId, country);
-
     cache.set(cacheKey, aliData);
     res.json({ ...aliData, cached: false });
-
   } catch (err) {
     console.error('❌ API error:', err.message || err);
     res.status(500).json({ error: 'Internal server error' });

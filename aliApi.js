@@ -1,52 +1,69 @@
 const axios = require('axios');
 
-const RAPID_API_KEY = '16c6cbfd78mshe15bb5c24977eb5p117f15jsn30df2747928d'; // 🚨 ZAMENI sa svojim validnim ključem
+const RAPID_API_KEY = '16c6cbfd78mshe15bb5c24977eb5p117f15jsn30df2747928d';
 
 async function getAliExpressData(productId, countryCode = 'US') {
   const options = {
     method: 'GET',
     url: 'https://aliexpress-datahub.p.rapidapi.com/item_detail_2',
     params: {
-      itemId: productId
+      itemId: productId,
+      shipTo: countryCode
     },
     headers: {
-      'X-RapidAPI-Key': RAPID_API_KEY,
-      'X-RapidAPI-Host': 'aliexpress-datahub.p.rapidapi.com'
+      'x-rapidapi-key': RAPID_API_KEY,
+      'x-rapidapi-host': 'aliexpress-datahub.p.rapidapi.com'
     }
   };
 
   try {
     const response = await axios.request(options);
+    const result = response.data?.result;
 
-    if (!response.data || !response.data.data) {
-      console.warn('⚠️ Prazan odgovor sa API-ja za productId:', productId);
-      throw new Error(`Empty or invalid data returned for productId: ${productId}`);
+    // 🧪 Debug: Celi odgovor i skuMap
+    console.log("🔥 RAW RESPONSE:", JSON.stringify(response.data, null, 2));
+    console.log("🧪 DEBUG SKU MAP:", JSON.stringify(result?.item?.sku?.skuMap, null, 2));
+
+    if (!result?.item) {
+      console.warn(`⚠️ Prazan odgovor sa API-ja za productId: ${productId}`);
+      return {
+        title: 'No Title',
+        price: 'N/A',
+        currency: result?.settings?.currency || 'USD',
+        variants: [],
+        free_shipping: false,
+        delivery_time: 'Unknown'
+      };
     }
 
-    const data = response.data.data;
+    const item = result.item;
+    const delivery = result.delivery || {};
+    const skuMap = item?.sku?.skuMap || {};
 
-    const variants = (data.sku_info || []).map((sku) => ({
-      name: sku?.sku_attr?.map(attr => `${attr.attr_name}: ${attr.attr_value}`).join(', ') || 'Unknown variant',
-      price: sku?.sku_val?.sku_activity_amount?.value || sku?.sku_val?.sku_amount?.value || 'N/A',
-      available: sku?.sku_val?.avail_quantity || 0,
-      delivery_time: data.delivery?.ship_time || 'Unknown'
+    const variants = Object.entries(skuMap).map(([key, sku]) => ({
+      name: key,
+      price: sku.price?.discountPrice?.value || sku.price?.salePrice?.value || 'N/A',
+      available: sku.inventory || 0,
+      delivery_time: delivery.shippingOutDays
+        ? `${delivery.shippingOutDays} days`
+        : 'Unknown'
     }));
 
-    const result = {
-      title: data.subject || 'No Title',
-      price: data.app_sale_price?.value || 'N/A',
-      currency: data.app_sale_price?.currency || 'USD',
+    return {
+      title: item.title || 'No Title',
+      price: variants[0]?.price || 'N/A',
+      currency: result.settings?.currency || 'USD',
       variants,
       free_shipping: true,
-      delivery_time: data.delivery?.ship_time || 'Unknown'
+      delivery_time: delivery.shippingOutDays
+        ? `${delivery.shippingOutDays} days`
+        : 'Unknown'
     };
 
-    console.log('✅ API odgovor za', productId, '=>', JSON.stringify(result, null, 2));
-    return result;
-
   } catch (error) {
-    console.error('❌ AliExpress API error:', error.message || error);
+    console.error('❌ AliExpress API error:', error.message);
     return {
+      title: 'No Title',
       price: 'N/A',
       currency: 'USD',
       variants: [],

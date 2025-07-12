@@ -1,23 +1,6 @@
-const cache = {};
-const TTL = 3 * 60 * 60 * 1000;
+const NodeCache = require('node-cache');
 
-function get(key) {
-  const item = cache[key];
-  if (!item) return null;
+// Keš traje 3 sata (u sekundama)
+const cache = new NodeCache({ stdTTL: 10800 });
 
-  if (Date.now() - item.timestamp < TTL) {
-    return item.data;
-  } else {
-    delete cache[key];
-    return null;
-  }
-}
-
-function set(key, data) {
-  cache[key] = {
-    data,
-    timestamp: Date.now()
-  };
-}
-
-module.exports = { get, set };
+module.exports = cache;
