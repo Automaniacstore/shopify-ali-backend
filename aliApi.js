@@ -1,8 +1,35 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 const RAPID_API_KEY = '16c6cbfd78mshe15bb5c24977eb5p117f15jsn30df2747928d';
+const CACHE_DIR = './cache'; // Lokalno (na serveru ćeš koristiti /mnt/data/ali_cache)
+
+if (!fs.existsSync(CACHE_DIR)) {
+  fs.mkdirSync(CACHE_DIR);
+}
+
+function getCacheFilePath(productId, countryCode) {
+  return path.join(CACHE_DIR, `${productId}_${countryCode.toUpperCase()}.json`);
+}
+
+function isCacheValid(filePath) {
+  if (!fs.existsSync(filePath)) return false;
+  const stats = fs.statSync(filePath);
+  const age = (Date.now() - stats.mtimeMs) / (1000 * 60 * 60); // u satima
+  return age < 3;
+}
 
 async function getAliExpressData(productId, countryCode = 'US') {
+  const cacheFile = getCacheFilePath(productId, countryCode);
+
+  // ✅ Ako postoji validan cache, koristi njega
+  if (isCacheValid(cacheFile)) {
+    console.log('📦 Returning cached data...');
+    const data = fs.readFileSync(cacheFile);
+    return JSON.parse(data);
+  }
+
   const options = {
     method: 'GET',
     url: 'https://aliexpress-datahub.p.rapidapi.com/item_detail_2',
@@ -33,6 +60,9 @@ async function getAliExpressData(productId, countryCode = 'US') {
       free_shipping: true,
       delivery_time: product.delivery_time || 'Unknown'
     };
+
+    // 💾 Snimi u cache
+    fs.writeFileSync(cacheFile, JSON.stringify(data));
 
     return data;
   } catch (error) {
