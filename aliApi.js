@@ -5,43 +5,39 @@ const RAPID_API_KEY = '16c6cbfd78mshe15bb5c24977eb5p117f15jsn30df2747928d';
 async function getAliExpressData(productId, countryCode = 'US') {
   const options = {
     method: 'GET',
-    url: 'https://ali-express1.p.rapidapi.com/product/detail',
+    url: 'https://aliexpress-datahub.p.rapidapi.com/item_detail_2',
     params: {
-      productId: productId,
+      itemId: productId,
       locale: countryCode.toLowerCase(),
-      currency: 'USD',
+      currency: 'USD'
     },
     headers: {
       'X-RapidAPI-Key': RAPID_API_KEY,
-      'X-RapidAPI-Host': 'ali-express1.p.rapidapi.com',
+      'X-RapidAPI-Host': 'aliexpress-datahub.p.rapidapi.com'
     }
   };
 
   try {
     const response = await axios.request(options);
-    const product = response.data;
-
-    if (!product || !product.sku_info) throw new Error('Missing product data');
+    const product = response.data.result;
 
     const data = {
-      title: product.title || '',
-      price: product.app_sale_price || 'N/A',
-      currency: product.currency_code || 'USD',
-      variants: product.sku_info.map(sku => ({
+      title: product.title,
+      price: product.app_sale_price?.value || 'N/A',
+      currency: product.app_sale_price?.currency || 'USD',
+      variants: product.sku_info?.map(sku => ({
         name: sku.sku_attr,
-        price: sku.sku_val?.sku_activity_amount?.value || sku.sku_val?.sku_amount?.value || 'N/A',
-        available: sku.sku_val?.avail_quantity || 0,
-      })),
+        price: sku.sku_val?.sku_activity_amount?.value || sku.sku_val?.sku_amount?.value,
+        available: sku.sku_val?.avail_quantity
+      })) || [],
       free_shipping: true,
-      delivery_time: product.shipping 
-        ? `${product.shipping.min_delivery_days}-${product.shipping.max_delivery_days} days`
-        : 'Unknown',
+      delivery_time: product.delivery_time || 'Unknown'
     };
 
     return data;
   } catch (error) {
-    console.error('❌ AliExpress API error:', error.message);
-    throw new Error('Failed to fetch product data from AliExpress');
+    console.error("❌ AliExpress API error:", error.response?.data || error.message);
+    throw new Error("Failed to fetch product data from AliExpress");
   }
 }
 
