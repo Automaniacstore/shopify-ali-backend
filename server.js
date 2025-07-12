@@ -20,15 +20,22 @@ app.get('/api/product', async (req, res) => {
   }
 
   try {
-    // 🌍 Geo-lokacija po IP
-    let country = 'US';
-    try {
-      const geoRes = await axios.get(`https://ipwho.is/${ip}`);
-      if (geoRes.data && geoRes.data.success && geoRes.data.country_code) {
-        country = geoRes.data.country_code;
+    // 🌍 CountryCode via param OR Geo-IP fallback
+    let country = req.query.countryCode;
+
+    if (!country) {
+      try {
+        const geoRes = await axios.get(`https://ipwho.is/${ip}`);
+        if (geoRes.data && geoRes.data.success && geoRes.data.country_code) {
+          country = geoRes.data.country_code;
+        } else {
+          console.warn('⚠️ Geo IP lookup failed, defaulting to US');
+          country = 'US';
+        }
+      } catch (geoErr) {
+        console.warn('⚠️ IP lookup error:', geoErr.message);
+        country = 'US';
       }
-    } catch (geoErr) {
-      console.warn('⚠️ Geo IP lookup failed, defaulting to US');
     }
 
     console.log(`[IP: ${ip}] Country: ${country} | Product: ${productId}`);
