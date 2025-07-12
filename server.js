@@ -18,8 +18,9 @@ app.get('/api/product', async (req, res) => {
   if (!productId) return res.status(400).json({ error: 'Missing productId' });
 
   try {
-    const geoRes = await axios.get(`http://ip-api.com/json/${ip}`);
-    const country = geoRes.data.countryCode || 'US';
+   const geoRes = await axios.get(`https://ipwho.is/${ip}`);
+const country = geoRes.data.country_code || 'US';
+
 
     const cacheKey = `${productId}_${country}`;
     const cachedData = cache.get(cacheKey);
