@@ -22,7 +22,6 @@ async function getAliExpressData(productId, countryCode = 'US') {
 
     // 🧪 Debug: Celi odgovor i skuMap
     console.log("🔥 RAW RESPONSE:", JSON.stringify(response.data, null, 2));
-    console.log("🧪 DEBUG SKU MAP:", JSON.stringify(result?.item?.sku?.skuMap, null, 2));
 
     if (!result?.item) {
       console.warn(`⚠️ Prazan odgovor sa API-ja za productId: ${productId}`);
@@ -39,25 +38,41 @@ async function getAliExpressData(productId, countryCode = 'US') {
     const item = result.item;
     const delivery = result.delivery || {};
     const skuMap = item?.sku?.skuMap || {};
+    const currency = result.settings?.currency || 'USD';
 
-    const variants = Object.entries(skuMap).map(([key, sku]) => ({
-      name: key,
-      price: sku.price?.discountPrice?.value || sku.price?.salePrice?.value || 'N/A',
-      available: sku.inventory || 0,
-      delivery_time: delivery.shippingOutDays
+    const variants = Object.entries(skuMap).map(([key, sku]) => {
+      const price = sku.price?.discountPrice?.value || sku.price?.salePrice?.value || null;
+      const available = sku.inventory || 0;
+      const delivery_time = delivery.shippingOutDays
         ? `${delivery.shippingOutDays} days`
-        : 'Unknown'
-    }));
+        : 'Unknown';
+
+      return {
+        name: key,
+        price,
+        available,
+        delivery_time,
+        outOfStock: available <= 0
+      };
+    });
+
+    // 🏆 Izbor najpovoljnijeg dobavljača po ceni + vremenu isporuke
+    const bestVariant = variants
+      .filter(v => v.price && !v.outOfStock)
+      .sort((a, b) => {
+        const priceDiff = parseFloat(a.price) - parseFloat(b.price);
+        if (priceDiff !== 0) return priceDiff;
+        const getDays = t => parseInt(t.replace(/\D/g, '')) || 999;
+        return getDays(a.delivery_time) - getDays(b.delivery_time);
+      })[0];
 
     return {
       title: item.title || 'No Title',
-      price: variants[0]?.price || 'N/A',
-      currency: result.settings?.currency || 'USD',
+      price: bestVariant?.price || 'N/A',
+      currency,
       variants,
       free_shipping: true,
-      delivery_time: delivery.shippingOutDays
-        ? `${delivery.shippingOutDays} days`
-        : 'Unknown'
+      delivery_time: bestVariant?.delivery_time || 'Unknown'
     };
 
   } catch (error) {
