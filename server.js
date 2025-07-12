@@ -13,27 +13,34 @@ app.use((req, res, next) => {
 
 app.get('/api/product', async (req, res) => {
   const productId = req.query.productId;
-  const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress;
 
   if (!productId) {
     return res.status(400).json({ error: 'Missing productId' });
   }
 
   try {
-    // 🌍 Geo lokacija po IP
-    const geoRes = await axios.get(`https://ipwho.is/${ip}`);
-    const country = geoRes.data && geoRes.data.country_code ? geoRes.data.country_code : 'US';
+    // 🌍 Geo-lokacija po IP
+    let country = 'US';
+    try {
+      const geoRes = await axios.get(`https://ipwho.is/${ip}`);
+      if (geoRes.data && geoRes.data.success && geoRes.data.country_code) {
+        country = geoRes.data.country_code;
+      }
+    } catch (geoErr) {
+      console.warn('⚠️ Geo IP lookup failed, defaulting to US');
+    }
 
     console.log(`[IP: ${ip}] Country: ${country} | Product: ${productId}`);
 
     // 🔁 Cache key
-  // const cacheKey = `${productId}_${country}`;
-  //  const cachedData = cache.get(cacheKey);
+    const cacheKey = `${productId}_${country}`;
+    const cachedData = cache.get(cacheKey);
 
-   // if (cachedData) {
-    //  console.log('✅ Serving from cache');
-    //  return res.json({ ...cachedData, cached: true });
-    //}
+    if (cachedData) {
+      console.log('✅ Serving from cache');
+      return res.json({ ...cachedData, cached: true });
+    }
 
     // 📦 Fetch sa AliExpress
     const aliData = await aliApi.getAliExpressData(productId, country);
