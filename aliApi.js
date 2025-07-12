@@ -1,52 +1,52 @@
 const axios = require('axios');
-const RAPID_API_KEY = '16c6cbfd78mshe15bb5c24977eb5p117f15jsn30df2747928d';
 
-async function getAliExpressData(productId, countryCode) {
+const RAPID_API_KEY = '16c6cbfd78mshe15bb5c24977eb5p117f15jsn30df2747928d'; // 🔐 Zameni sa svojim validnim ključem
+
+async function getAliExpressData(productId, countryCode = 'US') {
   const options = {
     method: 'GET',
-    url: 'https://ali-express1.p.rapidapi.com/product/detail',
+    url: 'https://aliexpress-datahub.p.rapidapi.com/item_detail_2',
     params: {
-      productId: productId,
-      locale: countryCode.toLowerCase(),
-      currency: 'USD'
+      itemId: productId
     },
     headers: {
       'X-RapidAPI-Key': RAPID_API_KEY,
-      'X-RapidAPI-Host': 'ali-express1.p.rapidapi.com'
+      'X-RapidAPI-Host': 'aliexpress-datahub.p.rapidapi.com'
     }
   };
 
   try {
     const response = await axios.request(options);
-    const product = response.data;
+    const data = response.data.data;
 
-    console.log('✅ API response:', JSON.stringify(product, null, 2)); // 🧠 Debug
+    // 🧩 Fallback ako nešto fali
+    if (!data) {
+      throw new Error('Empty response data');
+    }
 
-    const variants = product.sku_info?.map((sku) => ({
-      name: sku.sku_attr,
-      price: sku.sku_val?.sku_activity_amount?.value || sku.sku_val?.sku_amount?.value || "N/A",
-      available: sku.sku_val?.avail_quantity || 0,
-      delivery_time: product.shipping?.min_delivery_days && product.shipping?.max_delivery_days
-        ? `${product.shipping.min_delivery_days}-${product.shipping.max_delivery_days} days`
-        : 'Unknown'
-    })) || [];
+    const variants = (data.sku_info || []).map((sku) => ({
+      name: sku?.sku_attr?.map(attr => attr.attr_name + ': ' + attr.attr_value).join(', ') || 'Unknown variant',
+      price: sku?.sku_val?.sku_activity_amount?.value || sku?.sku_val?.sku_amount?.value || 'N/A',
+      available: sku?.sku_val?.avail_quantity || 0,
+      delivery_time: data.delivery?.ship_time || 'Unknown'
+    }));
 
     return {
-      title: product.title || 'No Title',
-      price: product.app_sale_price || 'N/A',
-      currency: product.currency_code || 'USD',
+      title: data.subject || 'No Title',
+      price: data.app_sale_price?.value || 'N/A',
+      currency: data.app_sale_price?.currency || 'USD',
       variants,
       free_shipping: true,
-      delivery_time: variants.length ? variants[0].delivery_time : 'Unknown'
+      delivery_time: data.delivery?.ship_time || 'Unknown'
     };
 
   } catch (error) {
-    console.error('❌ AliExpress API error:', error.message);
+    console.error('❌ AliExpress API error:', error.message || error);
     return {
       price: 'N/A',
       currency: 'USD',
       variants: [],
-      free_shipping: true,
+      free_shipping: false,
       delivery_time: 'Unknown'
     };
   }
