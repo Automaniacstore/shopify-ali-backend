@@ -14,15 +14,18 @@ app.use((req, res, next) => {
 app.get('/api/product', async (req, res) => {
   const productId = req.query.productId;
   const manualCountry = req.query.country;
-  const refresh = req.query.refresh === 'true'; // ✅ proveravamo da li korisnik traži sveže
+  const refresh = req.query.refresh === 'true';
 
   const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress;
 
   if (!productId) return res.status(400).json({ error: 'Missing productId' });
 
-  let country = manualCountry || 'US';
+  let country = 'US'; // default
 
-  if (!manualCountry) {
+  if (manualCountry) {
+    country = manualCountry.toUpperCase();
+    console.log(`🌍 Manual country override: ${country}`);
+  } else {
     try {
       const geoRes = await axios.get(`https://ipwho.is/${ip}`);
       if (geoRes.data && geoRes.data.success && geoRes.data.country_code) {
@@ -39,7 +42,6 @@ app.get('/api/product', async (req, res) => {
 
   const cacheKey = `${productId}_${country}`;
 
-  // ✅ ako nije tražen refresh, pokušaj da koristiš keš
   if (!refresh) {
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
