@@ -1,8 +1,16 @@
 const axios = require('axios');
+const NodeCache = require('node-cache');
 
 const RAPID_API_KEY = '16c6cbfd78mshe15bb5c24977eb5p117f15jsn30df2747928d';
+const cache = new NodeCache({ stdTTL: 10800 }); // 3 sata keš
 
 async function getAliExpressData(productId, countryCode = 'US') {
+  const cacheKey = `${productId}_${countryCode}`;
+  const cachedData = cache.get(cacheKey);
+  if (cachedData) {
+    return { ...cachedData, cached: true };
+  }
+
   const options = {
     method: 'GET',
     url: 'https://aliexpress-datahub.p.rapidapi.com/item_detail_2',
@@ -20,7 +28,6 @@ async function getAliExpressData(productId, countryCode = 'US') {
     const response = await axios.request(options);
     const result = response.data?.result;
 
-    // 🧪 Debug: Celi odgovor i skuMap
     console.log("🔥 RAW RESPONSE:", JSON.stringify(response.data, null, 2));
 
     if (!result?.item) {
@@ -31,7 +38,8 @@ async function getAliExpressData(productId, countryCode = 'US') {
         currency: result?.settings?.currency || 'USD',
         variants: [],
         free_shipping: false,
-        delivery_time: 'Unknown'
+        delivery_time: 'Unknown',
+        cached: false
       };
     }
 
@@ -56,7 +64,6 @@ async function getAliExpressData(productId, countryCode = 'US') {
       };
     });
 
-    // 🏆 Izbor najpovoljnijeg dobavljača po ceni + vremenu isporuke
     const bestVariant = variants
       .filter(v => v.price && !v.outOfStock)
       .sort((a, b) => {
@@ -66,15 +73,18 @@ async function getAliExpressData(productId, countryCode = 'US') {
         return getDays(a.delivery_time) - getDays(b.delivery_time);
       })[0];
 
-    return {
+    const finalData = {
       title: item.title || 'No Title',
       price: bestVariant?.price || 'N/A',
       currency,
       variants,
       free_shipping: true,
-      delivery_time: bestVariant?.delivery_time || 'Unknown'
+      delivery_time: bestVariant?.delivery_time || 'Unknown',
+      cached: false
     };
 
+    cache.set(cacheKey, finalData);
+    return finalData;
   } catch (error) {
     console.error('❌ AliExpress API error:', error.message);
     return {
@@ -83,7 +93,8 @@ async function getAliExpressData(productId, countryCode = 'US') {
       currency: 'USD',
       variants: [],
       free_shipping: false,
-      delivery_time: 'Unknown'
+      delivery_time: 'Unknown',
+      cached: false
     };
   }
 }
